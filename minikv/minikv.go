@@ -2,6 +2,8 @@ package minikv
 
 import (
 	"encoding/binary"
+	"slices"
+	"strings"
 
 	"github.com/amrable/minikv/filemanager"
 	"github.com/amrable/minikv/skiplist"
@@ -15,6 +17,11 @@ type KV struct {
 type Entry struct {
 	Key   string
 	Value []byte
+}
+
+type Record struct {
+	Value   []byte
+	Deleted bool
 }
 
 func Open(dataPath string) *KV {
@@ -48,21 +55,28 @@ func (kv *KV) Get(k string) ([]byte, bool, error) {
 }
 
 func (kv *KV) Scan(from, to string) ([]Entry, error) {
-	scannedEntries := make([]Entry, 0)
+	inMem := make(map[string]Record)
 	for _, e := range kv.skiplist.Scan(from, to) {
-		if e.Entry.Deleted {
-			continue
-		}
-		scannedEntries = append(scannedEntries, Entry{e.Key, e.Entry.Value})
+		inMem[e.Key] = Record{e.Entry.Value, e.Entry.Deleted}
 	}
 	for b, err := range filemanager.Walk(kv.dataPath) {
 		if err != nil {
 			return nil, err
 		}
 		diskEntries := deserializeScan(from, to, b)
-		scannedEntries = merge(scannedEntries, diskEntries)
+		merge(inMem, diskEntries)
 	}
-	return scannedEntries, nil
+	out := make([]Entry, 0, len(inMem))
+	for k, v := range inMem {
+		if v.Deleted {
+			continue
+		}
+		out = append(out, Entry{k, v.Value})
+	}
+	slices.SortFunc(out, func(a, b Entry) int {
+		return strings.Compare(a.Key, b.Key)
+	})
+	return out, nil
 }
 
 func (kv *KV) Put(k string, v []byte) {
@@ -79,7 +93,7 @@ func (kv *KV) Close() error {
 
 func deserializeGet(key string, b []byte) (skiplist.Entry, bool) {
 	i := 0
-	for i+9 < len(b) {
+	for i+9 <= len(b) {
 		isTombStone := b[i]
 		keyLengthByte := b[i+1 : i+5]
 		valueLengthByte := b[i+5 : i+9]
@@ -105,11 +119,11 @@ func deserializeGet(key string, b []byte) (skiplist.Entry, bool) {
 	return skiplist.Entry{}, false
 }
 
-func deserializeScan(from, to string, b []byte) []Entry {
-	entries := make([]Entry, 0)
+func deserializeScan(from, to string, b []byte) map[string]Record {
+	entries := make(map[string]Record)
 	i := 0
-	for i+9 < len(b) {
-		isTombStone := b[i]
+	for i+9 <= len(b) {
+		isTombStone := bool(b[i] != 0)
 		keyLengthByte := b[i+1 : i+5]
 		valueLengthByte := b[i+5 : i+9]
 
@@ -123,38 +137,18 @@ func deserializeScan(from, to string, b []byte) []Entry {
 		keyByte := b[keyStartIndex:keyEndIndex]
 		valueByte := b[keyEndIndex:valueEndIndex]
 
-		if string(keyByte) >= from && string(keyByte) <= to && isTombStone == 0 {
-			e := Entry{
-				Key:   string(keyByte),
-				Value: valueByte,
-			}
-			entries = append(entries, e)
+		if string(keyByte) >= from && string(keyByte) <= to {
+			entries[string(keyByte)] = Record{Value: valueByte, Deleted: isTombStone}
 		}
 		i += 9 + int(keyLength) + int(valueLength)
 	}
 	return entries
 }
 
-func merge(a, b []Entry) []Entry {
-	out := make([]Entry, 0, len(a)+len(b))
-
-	i, j := 0, 0
-	for i < len(a) && j < len(b) {
-		if a[i].Key < b[j].Key {
-			out = append(out, a[i])
-			i++
-		} else {
-			out = append(out, b[j])
-			j++
+func merge(a, b map[string]Record) {
+	for k, v := range b {
+		if _, ok := a[k]; !ok {
+			a[k] = v
 		}
 	}
-	for i < len(a) {
-		out = append(out, a[i])
-		i++
-	}
-	for j < len(b) {
-		out = append(out, b[j])
-		j++
-	}
-	return out
 }
