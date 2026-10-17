@@ -1,6 +1,9 @@
 package skiplist
 
-import "math/rand/v2"
+import (
+	"encoding/binary"
+	"math/rand/v2"
+)
 
 const (
 	MAX_LEVEL = 16
@@ -102,7 +105,7 @@ func (l *List) Scan(from, to string) []Tuple {
 	return ans
 }
 
-func (l *List) All() []Tuple {
+func (l *List) all() []Tuple {
 	curr := l.head.forward[0]
 	ans := make([]Tuple, 0)
 	for curr != nil {
@@ -110,4 +113,26 @@ func (l *List) All() []Tuple {
 		curr = curr.forward[0]
 	}
 	return ans
+}
+
+func (l *List) ToBytes() []byte {
+	b := make([]byte, 0)
+	for _, t := range l.all() {
+		isTombStone := t.Entry.Deleted
+		keyLength := len(t.Key)
+		valueLength := len(t.Entry.Value)
+		k := t.Key
+		v := t.Entry.Value
+
+		flag := byte(0)
+		if isTombStone {
+			flag = 1
+		}
+		b = append(b, flag)
+		b = binary.BigEndian.AppendUint32(b, uint32(keyLength))
+		b = binary.BigEndian.AppendUint32(b, uint32(valueLength))
+		b = append(b, k...)
+		b = append(b, v...)
+	}
+	return b
 }
