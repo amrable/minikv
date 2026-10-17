@@ -12,11 +12,11 @@ func TestList(t *testing.T) {
 	l.Put("aa", []byte("bb"))
 	l.Put("aaa", []byte("bbb"))
 	gotB, ok := l.Get("a")
-	if !ok || string(gotB) != "b" {
+	if !ok || gotB.Deleted || string(gotB.Value) != "b" {
 		t.Fatal("wrong answer")
 	}
 	gotB, ok = l.Get("aa")
-	if !ok || string(gotB) != "bb" {
+	if !ok || gotB.Deleted || string(gotB.Value) != "bb" {
 		t.Fatal("wrong answer")
 	}
 }

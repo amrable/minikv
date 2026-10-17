@@ -14,8 +14,8 @@ func TestListMatchesMap(t *testing.T) {
 		model[key] = value
 		for key, want := range model {
 			got, ok := l.Get(key)
-			if !ok || string(got) != want {
-				t.Fatalf("Get(%q) = %q, %v; want %q, true", key, got, ok, want)
+			if !ok || got.Deleted || string(got.Value) != want {
+				t.Fatalf("Get(%q) = %+v, %v; want %q, true", key, got, ok, want)
 			}
 		}
 	}
@@ -48,8 +48,8 @@ func TestPutReplacesExistingValue(t *testing.T) {
 	l.Put("a", []byte("old"))
 	l.Put("a", []byte("new"))
 	value, ok := l.Get("a")
-	if !ok || string(value) != "new" {
-		t.Fatalf("Get(a) = %q, %v; want new, true", value, ok)
+	if !ok || value.Deleted || string(value.Value) != "new" {
+		t.Fatalf("Get(a) = %+v, %v; want new, true", value, ok)
 	}
 	count := 0
 	for n := l.head.forward[0]; n != nil; n = n.forward[0] {
@@ -67,12 +67,12 @@ func TestGetAcrossBottomLevel(t *testing.T) {
 	for _, key := range []string{"a", "b", "c", "d"} {
 		n := newNode()
 		n.key = key
-		n.value = []byte(key)
+		n.value = Entry{Value: []byte(key)}
 		previous.forward[0] = n
 		previous = n
 	}
 	value, ok := l.Get("d")
-	if !ok || string(value) != "d" {
-		t.Fatalf("Get(d) = %q, %v; want d, true", value, ok)
+	if !ok || value.Deleted || string(value.Value) != "d" {
+		t.Fatalf("Get(d) = %+v, %v; want d, true", value, ok)
 	}
 }

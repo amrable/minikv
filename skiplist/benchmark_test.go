@@ -8,8 +8,8 @@ import (
 	"github.com/amrable/minikv/skiplist"
 )
 
-var benchmarkValue []byte
-var benchmarkPairs []skiplist.Pair
+var benchmarkValue skiplist.Entry
+var benchmarkPairs []skiplist.Tuple
 
 func BenchmarkSkipList(b *testing.B) {
 	for _, size := range []int{1_000, 10_000} {
