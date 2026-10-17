@@ -3,6 +3,7 @@ package skiplist
 import (
 	"encoding/binary"
 	"math/rand/v2"
+	"unsafe"
 )
 
 const (
@@ -135,4 +136,17 @@ func (l *List) ToBytes() []byte {
 		b = append(b, v...)
 	}
 	return b
+}
+
+func (l *List) Size() int {
+	s := 0
+	curr := l.head
+	for curr != nil {
+		s += int(unsafe.Sizeof(node{})) +
+			len(curr.key) +
+			len(curr.value.Value) +
+			len(curr.forward)*8
+		curr = curr.forward[0]
+	}
+	return s
 }

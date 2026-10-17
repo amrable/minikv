@@ -8,7 +8,7 @@ import (
 	"github.com/amrable/minikv/skiplist"
 )
 
-func phase2NoPanic(t *testing.T) {
+func failOnPanic(t *testing.T) {
 	t.Helper()
 	if p := recover(); p != nil {
 		t.Fatalf("database operation panicked: %v", p)
@@ -16,8 +16,8 @@ func phase2NoPanic(t *testing.T) {
 }
 
 // Public API done check: no test-only initialization.
-func TestPhase2CloseReopen(t *testing.T) {
-	defer phase2NoPanic(t)
+func TestClosePersistsValuesAcrossReopen(t *testing.T) {
+	defer failOnPanic(t)
 	dir := t.TempDir()
 	db := Open(dir)
 	db.Put("c", []byte("third"))
@@ -39,11 +39,11 @@ func TestPhase2CloseReopen(t *testing.T) {
 }
 
 // Initialize only the memtable to isolate lookup behavior from Open's setup.
-func phase2DB(dir string) *KV {
-	return &KV{dataPath: dir, skiplist: *skiplist.New()}
+func newTestDB(dir string) *KV {
+	return &KV{dataPath: dir, skiplist: skiplist.New()}
 }
 
-func phase2File(t *testing.T, dir, name string, values map[string]string) {
+func writeTestSSTable(t *testing.T, dir, name string, values map[string]string) {
 	t.Helper()
 	l := skiplist.New()
 	for k, v := range values {
@@ -54,10 +54,10 @@ func phase2File(t *testing.T, dir, name string, values map[string]string) {
 	}
 }
 
-func TestPhase2LookupMatchesMap(t *testing.T) {
+func TestGetPrefersMemoryThenNewestSSTable(t *testing.T) {
 	dir := t.TempDir()
-	phase2File(t, dir, "000001.sst", map[string]string{"a": "old", "b": "disk-only"})
-	phase2File(t, dir, "000002.sst", map[string]string{"a": "new"})
+	writeTestSSTable(t, dir, "000001.sst", map[string]string{"a": "old", "b": "disk-only"})
+	writeTestSSTable(t, dir, "000002.sst", map[string]string{"a": "new"})
 	// An unfinished file must not be decoded.
 	if err := os.WriteFile(filepath.Join(dir, "000003.sst.tmp"), []byte("unfinished"), 0644); err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestPhase2LookupMatchesMap(t *testing.T) {
 			name = "memory"
 		}
 		t.Run(name, func(t *testing.T) {
-			db := phase2DB(dir)
+			db := newTestDB(dir)
 			model := map[string]string{"a": "new", "b": "disk-only"}
 			if memory {
 				db.Put("a", []byte("memory"))
@@ -85,9 +85,9 @@ func TestPhase2LookupMatchesMap(t *testing.T) {
 	}
 }
 
-func TestPhase2ClosePublishesSSTable(t *testing.T) {
+func TestClosePublishesSSTable(t *testing.T) {
 	dir := t.TempDir()
-	db := phase2DB(dir)
+	db := newTestDB(dir)
 	db.Put("a", []byte("saved"))
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func TestPhase2ClosePublishesSSTable(t *testing.T) {
 	}
 }
 
-func TestPhase2MultipleClosesPreserveFiles(t *testing.T) {
+func TestClosePreservesEarlierSSTables(t *testing.T) {
 	dir := t.TempDir()
 	db := Open(dir)
 	db.Put("a", []byte("old"))

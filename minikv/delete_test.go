@@ -2,7 +2,7 @@ package minikv
 
 import "testing"
 
-func TestPhase4DeleteDiskKeySurvivesReopen(t *testing.T) {
+func TestDeleteAndReinsertPersistAcrossReopen(t *testing.T) {
 	dir := t.TempDir()
 	db := Open(dir)
 	db.Put("a", []byte("old"))

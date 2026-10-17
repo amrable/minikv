@@ -2,6 +2,7 @@ package minikv
 
 import (
 	"encoding/binary"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -9,9 +10,11 @@ import (
 	"github.com/amrable/minikv/skiplist"
 )
 
+const MAX_INMEM_BYTES = 1024
+
 type KV struct {
 	dataPath string
-	skiplist skiplist.List
+	skiplist *skiplist.List
 }
 
 type Entry struct {
@@ -27,7 +30,7 @@ type Record struct {
 func Open(dataPath string) *KV {
 	return &KV{
 		dataPath: dataPath,
-		skiplist: *skiplist.New(),
+		skiplist: skiplist.New(),
 	}
 }
 
@@ -79,16 +82,31 @@ func (kv *KV) Scan(from, to string) ([]Entry, error) {
 	return out, nil
 }
 
-func (kv *KV) Put(k string, v []byte) {
+func (kv *KV) Put(k string, v []byte) error {
 	kv.skiplist.Put(k, v)
+	return kv.checkOverflow()
 }
 
-func (kv *KV) Delete(k string, v []byte) {
+func (kv *KV) Delete(k string, v []byte) error {
 	kv.skiplist.Delete(k)
+	return kv.checkOverflow()
 }
 
 func (kv *KV) Close() error {
 	return filemanager.Write(kv.dataPath, kv.skiplist.ToBytes())
+}
+
+func (kv *KV) checkOverflow() error {
+	if kv.skiplist.Size() <= MAX_INMEM_BYTES {
+		return nil
+	}
+	err := kv.Close()
+	if err != nil {
+		fmt.Printf("failed to flush\n")
+		return err
+	}
+	kv.skiplist = skiplist.New()
+	return nil
 }
 
 func deserializeGet(key string, b []byte) (skiplist.Entry, bool) {
