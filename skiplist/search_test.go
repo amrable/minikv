@@ -5,7 +5,7 @@ import "testing"
 func TestListMatchesMap(t *testing.T) {
 	l := New()
 	model := make(map[string]string)
-	for _, key := range []string{"d", "a", "f", "c", "b", "e", "c"} {
+	for _, key := range []string{"d", "a", "aa", "aaa", "f", "c", "b", "e", "c"} {
 		value := "value-" + key
 		if _, exists := model[key]; exists {
 			value = "updated-" + key
