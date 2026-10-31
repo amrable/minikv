@@ -49,9 +49,9 @@ func Open(dirPath string) (*KV, error) {
 	if err := w.Replay(func(r wal.Record) error {
 		switch r.Type {
 		case wal.Put:
-			kv.skiplist.Put(r.Key, r.Value)
+			kv.skiplist.Put(skiplist.Tuple{Key: r.Key, Value: r.Value, Deleted: false})
 		case wal.Delete:
-			kv.skiplist.Delete(r.Key)
+			kv.skiplist.Put(skiplist.Tuple{Key: r.Key, Value: nil, Deleted: true})
 		}
 		return nil
 	}); err != nil {
@@ -81,7 +81,7 @@ func (kv *KV) Put(k string, v []byte) error {
 	if err != nil {
 		return err
 	}
-	kv.skiplist.Put(k, v)
+	kv.skiplist.Put(skiplist.Tuple{Key: k, Value: v, Deleted: false})
 	return nil
 }
 
@@ -93,7 +93,7 @@ func (kv *KV) Delete(k string, v []byte) error {
 	if err != nil {
 		return err
 	}
-	kv.skiplist.Delete(k)
+	kv.skiplist.Put(skiplist.Tuple{Key: k, Value: nil, Deleted: true})
 	return nil
 }
 
