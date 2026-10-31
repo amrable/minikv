@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/amrable/minikv/wal"
+	"github.com/amrable/minikv/internal/wal"
 )
 
 func TestWal(t *testing.T) {
