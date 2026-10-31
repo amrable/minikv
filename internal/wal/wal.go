@@ -42,11 +42,11 @@ type WAL struct {
 }
 
 func Open(path string) (*WAL, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(filepath.Join(path, "wal.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, err
 	}
-	dir, err := os.Open(filepath.Dir(path))
+	dir, err := os.Open(path)
 	if err != nil {
 		f.Close()
 		return nil, fmt.Errorf("open WAL directory: %w", err)
@@ -63,7 +63,7 @@ func Open(path string) (*WAL, error) {
 		return nil, fmt.Errorf("close WAL directory: %w", closeErr)
 	}
 	return &WAL{
-		path: path,
+		path: filepath.Join(path, "wal.log"),
 		file: f,
 	}, nil
 }
