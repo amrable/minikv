@@ -1,4 +1,4 @@
-package filemanager
+package sstmanager
 
 import (
 	"fmt"
@@ -10,19 +10,29 @@ import (
 	"strings"
 )
 
-func Write(dirName string, b []byte) error {
-	path, err := nextName(dirName)
+type SSTManager struct {
+	dirPath string
+}
+
+func New(dirPath string) *SSTManager {
+	return &SSTManager{
+		dirPath: dirPath,
+	}
+}
+
+func (s *SSTManager) Flush(data []byte) error {
+	path, err := nextName(s.dirPath)
 	if err != nil {
 		return err
 	}
 	tmpPath := path + ".tmp"
-	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	if _, err := f.Write(b); err != nil {
+	if _, err := f.Write(data); err != nil {
 		return err
 	}
 	if err := f.Sync(); err != nil {
@@ -34,7 +44,7 @@ func Write(dirName string, b []byte) error {
 	if err := os.Rename(tmpPath, path); err != nil {
 		return err
 	}
-	dir, err := os.Open(dirName)
+	dir, err := os.Open(s.dirPath)
 	if err != nil {
 		return err
 	}
@@ -45,21 +55,20 @@ func Write(dirName string, b []byte) error {
 	return nil
 }
 
-func Walk(dirPath string) iter.Seq2[[]byte, error] {
+func (s *SSTManager) Tables() iter.Seq2[[]byte, error] {
 	return func(yield func([]byte, error) bool) {
-		entries, err := os.ReadDir(dirPath)
+		entries, err := os.ReadDir(s.dirPath)
 		if err != nil {
 			yield(nil, err)
 			return
 		}
 
 		for _, entry := range slices.Backward(entries) {
-			if entry.IsDir() ||
-				!strings.HasSuffix(entry.Name(), ".sst") {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sst") {
 				continue
 			}
 
-			path := filepath.Join(dirPath, entry.Name())
+			path := filepath.Join(s.dirPath, entry.Name())
 			payload, err := os.ReadFile(path)
 			if err != nil {
 				yield(nil, err)

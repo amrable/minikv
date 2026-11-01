@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiniKV Viewer</title>
+  <style>
+    :root { color-scheme: light; --ink:#202923; --muted:#68736d; --line:#dce4dd; --paper:#f5f7f2; --white:#fff; --green:#175e46; --lime:#dff18c; --red:#a83835; --shadow:0 12px 32px #25352a0d; }
+    * { box-sizing:border-box }
+    body { margin:0; background:var(--paper); color:var(--ink); font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif }
+    header { background:#173d31; color:#f5f8f2; padding:22px max(24px,calc((100vw - 1320px)/2)); display:flex; justify-content:space-between; align-items:center; gap:20px }
+    header h1 { margin:0; font:600 22px/1.2 ui-serif,Georgia,serif; letter-spacing:-.3px }
+    header p { margin:5px 0 0; color:#bdd0c4; font-size:13px }
+    .live { border:1px solid #6d957c; border-radius:20px; padding:6px 11px; color:#e3f4ca; font-size:12px; white-space:nowrap }
+    main { max-width:1320px; margin:26px auto; padding:0 24px 50px }
+    .layout { display:grid; grid-template-columns:340px minmax(0,1fr); gap:18px; align-items:start }
+    .panel { background:var(--white); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); overflow:hidden }
+    .panel-head { padding:15px 18px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:10px }
+    .panel-head h2,.panel-head h3 { margin:0; font-size:14px; font-weight:650 }
+    .panel-body { padding:18px }
+    .workbench { position:sticky; top:18px }
+    label { display:block; color:var(--muted); font-size:12px; font-weight:600; margin:13px 0 6px }
+    input,textarea { width:100%; border:1px solid #cbd6cd; border-radius:7px; padding:10px 11px; color:var(--ink); background:#fff; font:inherit; outline:none }
+    input:focus,textarea:focus { border-color:#3a8667; box-shadow:0 0 0 3px #3a86671c }
+    textarea { min-height:96px; resize:vertical }
+    .buttons { display:flex; gap:8px; margin-top:14px }
+    button { border:0; border-radius:7px; padding:9px 13px; background:var(--green); color:#fff; font:inherit; font-weight:600; cursor:pointer }
+    button:hover { filter:brightness(1.09) }
+    button.secondary { background:#e9eee9; color:#34443a }
+    button.danger { background:#fff0ef; color:var(--red) }
+    button.small { padding:6px 9px; font-size:12px }
+    .result { display:none; margin-top:14px; border-radius:7px; padding:10px 12px; background:#edf5e6; color:#31553c; overflow-wrap:anywhere }
+    .result.error { background:#fff0ef; color:var(--red) }
+    .right { display:grid; gap:18px }
+    .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; padding:15px 18px }
+    .metric { background:#f6f8f5; border:1px solid #e8eee7; padding:12px; border-radius:8px }
+    .metric small { display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.07em }
+    .metric strong { display:block; font:600 21px ui-serif,Georgia,serif; margin-top:3px }
+    .section-note { color:var(--muted); font-size:12px; margin:0 }
+    .explain { background:#f1f6e8; border-left:3px solid #a6c65c; padding:11px 13px; color:#485542; border-radius:0 6px 6px 0; font-size:12px; margin:0 0 14px }
+    .table-wrap { overflow:auto }
+    table { border-collapse:collapse; width:100%; font-size:12px }
+    th { color:#6d7971; font-weight:600; text-align:left; text-transform:uppercase; letter-spacing:.06em; font-size:10px; background:#fafbf9 }
+    th,td { padding:9px 12px; border-bottom:1px solid #edf0ed; vertical-align:top }
+    td.key { font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace; white-space:nowrap }
+    td.value { max-width:480px; overflow-wrap:anywhere }
+    td.hex { color:#89938d; font:11px ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere }
+    .pill { display:inline-block; padding:2px 7px; border-radius:20px; background:#eaf1e9; color:#46634d; font-size:10px }
+    .pill.tombstone { background:#fff0ef; color:var(--red) }
+    details { border-top:1px solid var(--line) }
+    details:first-of-type { border-top:0 }
+    summary { list-style:none; cursor:pointer; padding:13px 18px; display:flex; justify-content:space-between; align-items:center; font-weight:650 }
+    summary::-webkit-details-marker { display:none }
+    summary:after { content:"+"; color:var(--muted); font-size:18px; font-weight:400 }
+    details[open] summary:after { content:"−" }
+    .detail-content { padding:0 18px 16px }
+    .empty { color:#89938d; text-align:center; padding:18px; font-size:12px }
+    .toolbar { display:flex; align-items:center; gap:7px }
+    .toolbar input { width:125px; padding:6px 8px; font-size:12px }
+    code { background:#eef1ed; border-radius:4px; padding:2px 5px; font-size:11px }
+    footer { color:#839087; text-align:center; font-size:11px; margin-top:18px }
+    @media(max-width:850px) { .layout{grid-template-columns:1fr}.workbench{position:static}.metrics{grid-template-columns:repeat(2,1fr)} }
+  </style>
+</head>
+<body>
+  <header>
+    <div><h1>MiniKV <span style="color:#dff18c">/</span> internals viewer</h1><p>A small window into the LSM tree running on your machine.</p></div>
+    <div class="live">● local database</div>
+  </header>
+  <main>
+    <div class="layout">
+      <section class="panel workbench">
+        <div class="panel-head"><h2>Workbench</h2><button class="secondary small" id="refresh">Refresh state</button></div>
+        <div class="panel-body">
+          <p class="section-note">Try a write, then follow it through the WAL and memtable.</p>
+          <label for="key">Key</label><input id="key" placeholder="e.g. user:42" autocomplete="off">
+          <label for="value">Value</label><textarea id="value" placeholder="A value stored as bytes"></textarea>
+          <div class="buttons"><button id="put">Put</button><button class="danger" id="delete">Delete key</button></div>
+          <div class="buttons"><button class="secondary" id="get">Get key</button></div>
+          <div class="result" id="result"></div>
+          <label>Range view</label>
+          <div class="toolbar"><input id="from" placeholder="from (inclusive)"><input id="to" placeholder="to (inclusive)"><button class="secondary small" id="scan">Scan</button></div>
+        </div>
+      </section>
+
+      <div class="right">
+        <section class="panel">
+          <div class="panel-head"><h2>Database at a glance</h2><span class="section-note" id="directory"></span></div>
+          <div class="metrics">
+            <div class="metric"><small>Memtable entries</small><strong id="mem-count">—</strong></div>
+            <div class="metric"><small>Memtable estimate</small><strong id="mem-size">—</strong></div>
+            <div class="metric"><small>WAL bytes</small><strong id="wal-size">—</strong></div>
+            <div class="metric"><small>SSTables</small><strong id="sst-count">—</strong></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>Visible key/value state</h2><span class="section-note">memtable wins, then newest SST</span></div>
+          <div class="table-wrap"><table><thead><tr><th>Key</th><th>Value</th><th>Source state</th><th>Bytes (hex)</th></tr></thead><tbody id="visible"></tbody></table></div>
+        </section>
+
+        <section class="panel">
+          <details open>
+            <summary>Write-ahead log <span class="section-note">append first, replay after restart</span></summary>
+            <div class="detail-content"><p class="explain">Every Put or Delete is appended and synced here before the in-memory skiplist changes. A restart replays these operations into the memtable.</p><div class="table-wrap"><table><thead><tr><th>#</th><th>Operation</th><th>Key</th><th>Value</th></tr></thead><tbody id="wal"></tbody></table></div></div>
+          </details>
+          <details open>
+            <summary>Memtable / skiplist <span class="section-note">current sorted in-memory view</span></summary>
+            <div class="detail-content"><p class="explain">The skiplist keeps one newest tuple per key, in sorted order. Tombstones stay here as deletion markers so older SST values don’t reappear.</p><div class="table-wrap"><table><thead><tr><th>Key</th><th>Value</th><th>State</th><th>Bytes (hex)</th></tr></thead><tbody id="memtable"></tbody></table></div></div>
+          </details>
+          <div id="tables"></div>
+        </section>
+      </div>
+    </div>
+    <footer>Educational viewer · values are shown as text and hex · closing the server flushes the memtable into an SSTable</footer>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    const esc = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    const bytes = n => n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KiB`;
+    function rows(entries, showState = true) {
+      if (!entries.length) return '<tr><td class="empty" colspan="4">No entries</td></tr>';
+      return entries.map(e => `<tr><td class="key">${esc(e.key)}</td><td class="value">${e.deleted ? '<em>—</em>' : esc(e.value)}</td>${showState ? `<td><span class="pill ${e.deleted ? 'tombstone' : ''}">${e.deleted ? 'tombstone' : 'value'}</span></td>` : ''}<td class="hex">${esc(e.hex || '')}</td></tr>`).join('');
+    }
+    async function request(url, options) {
+      const response = await fetch(url, options);
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || response.statusText);
+      return body;
+    }
+    function showResult(message, isError = false) {
+      const box = $('result'); box.style.display = 'block'; box.classList.toggle('error', isError); box.textContent = message;
+    }
+    async function refresh() {
+      const s = await request('/api/state');
+      $('directory').textContent = s.directory;
+      $('mem-count').textContent = s.memtable.length;
+      $('mem-size').textContent = bytes(s.memtableBytes);
+      $('wal-size').textContent = bytes(s.walBytes);
+      $('sst-count').textContent = s.tables.length;
+      $('visible').innerHTML = rows(s.visible);
+      $('memtable').innerHTML = rows(s.memtable);
+      $('wal').innerHTML = s.wal.length ? s.wal.map((e,i) => `<tr><td>${i+1}</td><td><span class="pill ${e.operation === 'DELETE' ? 'tombstone' : ''}">${esc(e.operation)}</span></td><td class="key">${esc(e.key)}</td><td class="value">${e.operation === 'DELETE' ? '<em>—</em>' : esc(e.value)}<div class="hex">${esc(e.hex)}</div></td></tr>`).join('') : '<tr><td class="empty" colspan="4">WAL is empty</td></tr>';
+      $('tables').innerHTML = s.tables.map((t,i) => `<details ${i === 0 ? 'open' : ''}><summary>${esc(t.name)} <span class="section-note">${t.entries.length} entries · ${bytes(t.bytes)}</span></summary><div class="detail-content"><p class="explain">Older immutable sorted table. Reads check newer sources first.</p><div class="table-wrap"><table><thead><tr><th>Key</th><th>Value</th><th>State</th><th>Bytes (hex)</th></tr></thead><tbody>${rows(t.entries)}</tbody></table></div></div></details>`).join('') || '<div class="empty">No SSTables yet. They are written when the database closes.</div>';
+    }
+    $('refresh').onclick = () => refresh().catch(e => showResult(e.message, true));
+    $('put').onclick = async () => { try { await request('/api/put',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:$('key').value,value:$('value').value})}); showResult('Put appended to WAL and applied to memtable.'); await refresh(); } catch(e) { showResult(e.message,true); } };
+    $('delete').onclick = async () => { try { await request('/api/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:$('key').value})}); showResult('Delete tombstone appended to WAL and applied to memtable.'); await refresh(); } catch(e) { showResult(e.message,true); } };
+    $('get').onclick = async () => { try { const result = await request(`/api/get?key=${encodeURIComponent($('key').value)}`); showResult(result.found ? `Found: ${result.value}  ·  hex ${result.hex}` : 'Key not found.'); } catch(e) { showResult(e.message,true); } };
+    $('scan').onclick = async () => { try { const q = new URLSearchParams({from:$('from').value,to:$('to').value}); const result = await request(`/api/scan?${q}`); showResult(`Scan returned ${result.length} visible entries: ${result.map(e=>e.key).join(', ') || 'none'}`); } catch(e) { showResult(e.message,true); } };
+    refresh().catch(e => showResult(e.message, true));
+  </script>
+</body>
+</html>

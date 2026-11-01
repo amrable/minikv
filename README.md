@@ -26,6 +26,20 @@ it is not a process memory limit.
 
 ## Usage
 
+### Interactive viewer
+
+Run the local viewer with:
+
+```sh
+go run ./cmd/viewer -dir ./minikv-data -addr 127.0.0.1:8080
+```
+
+Open <http://127.0.0.1:8080> to try Get, Put, Delete, and range scans. The page
+shows the WAL records, current memtable, SSTables, and resolved key/value state.
+The viewer closes the database cleanly when you stop it, flushing the memtable.
+
+### Go API
+
 Requires Go 1.27.1 or later. Create the data directory before opening the database.
 
 ```go

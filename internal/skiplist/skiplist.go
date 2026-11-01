@@ -80,6 +80,14 @@ func (l *List) Scan(from, to string) []Tuple {
 	return ans
 }
 
+func (l *List) Entries() []Tuple {
+	entries := make([]Tuple, 0)
+	for curr := l.head.forward[0]; curr != nil; curr = curr.forward[0] {
+		entries = append(entries, cloneTuple(curr.tuple))
+	}
+	return entries
+}
+
 func (l *List) MarshalBinary() ([]byte, error) {
 	b := make([]byte, 0)
 	curr := l.head.forward[0]

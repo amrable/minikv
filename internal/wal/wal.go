@@ -103,6 +103,23 @@ func (w *WAL) Replay(apply func(Record) error) error {
 		r, n, err := fromBytes(data[i:])
 		if err != nil {
 			if errors.Is(err, ErrInsufficientBytesRecord) {
+				// clean up incomplete tail and supress error
+				w.mu.Lock()
+				defer w.mu.Unlock()
+
+				info, statErr := w.file.Stat()
+				if statErr != nil {
+					return statErr
+				}
+				if info.Size() != int64(len(data)) {
+					return errors.New("WAL  changed during replay")
+				}
+				if err := w.file.Truncate(int64(i)); err != nil {
+					return err
+				}
+				if err := w.file.Sync(); err != nil {
+					return err
+				}
 				return nil
 			}
 			return err

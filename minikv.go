@@ -2,16 +2,18 @@ package minikv
 
 import (
 	"fmt"
+	"iter"
 
 	"github.com/amrable/minikv/internal/skiplist"
+	"github.com/amrable/minikv/internal/sstmanager"
 	"github.com/amrable/minikv/internal/wal"
 )
 
 const MAX_INMEM_BYTES = 1024
 
 type SSTManager interface {
-	Get(string) ([]byte, bool, error)
-	Close() error
+	Tables() iter.Seq2[[]byte, error]
+	Flush(data []byte) error
 }
 
 type WAL interface {
@@ -27,8 +29,9 @@ type KV struct {
 }
 
 type Entry struct {
-	Key   string
-	Value []byte
+	Key     string
+	Value   []byte
+	Deleted bool
 }
 
 type Record struct {
@@ -36,14 +39,36 @@ type Record struct {
 	Deleted bool
 }
 
+type DebugState struct {
+	Memtable      []Entry
+	MemtableBytes int
+}
+
+// DebugState returns a point-in-time view of the in-memory skiplist.
+func (kv *KV) DebugState() DebugState {
+	tuples := kv.skiplist.Entries()
+	entries := make([]Entry, 0, len(tuples))
+	for _, tuple := range tuples {
+		entries = append(entries, Entry{
+			Key:     tuple.Key,
+			Value:   tuple.Value,
+			Deleted: tuple.Deleted,
+		})
+	}
+	return DebugState{
+		Memtable:      entries,
+		MemtableBytes: kv.skiplist.Size(),
+	}
+}
+
 func Open(dirPath string) (*KV, error) {
-	// todo: init sstmanager
 	w, err := wal.Open(dirPath)
 	if err != nil {
 		return nil, err
 	}
 	kv := KV{
 		wal:      w,
+		sst:      sstmanager.New(dirPath),
 		skiplist: skiplist.New(),
 	}
 	if err := w.Replay(func(r wal.Record) error {
@@ -69,7 +94,28 @@ func (kv *KV) Get(k string) ([]byte, bool, error) {
 		}
 		return entry.Value, true, nil
 	}
-	return kv.sst.Get(k)
+	for data, err := range kv.sst.Tables() {
+		if err != nil {
+			return nil, false, err
+		}
+		for len(data) > 0 {
+			tuple, consumed, err := skiplist.DecodeTuple(data)
+			if err != nil {
+				return nil, false, err
+			}
+			if tuple.Key == k {
+				if tuple.Deleted {
+					return nil, false, nil
+				}
+				return tuple.Value, true, nil
+			}
+			if tuple.Key > k {
+				break
+			}
+			data = data[consumed:]
+		}
+	}
+	return nil, false, nil
 }
 
 func (kv *KV) Put(k string, v []byte) error {
@@ -98,7 +144,11 @@ func (kv *KV) Delete(k string, v []byte) error {
 }
 
 func (kv *KV) Close() error {
-	errSSTManagerClose := kv.sst.Close()
+	skipListByte, err := kv.skiplist.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	errSSTManagerClose := kv.sst.Flush(skipListByte)
 	if errSSTManagerClose != nil {
 		return errSSTManagerClose
 	}
