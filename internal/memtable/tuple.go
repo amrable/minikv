@@ -1,4 +1,4 @@
-package skiplist
+package memtable
 
 import (
 	"encoding/binary"

@@ -1,4 +1,4 @@
-package skiplist
+package memtable
 
 import (
 	"math/rand/v2"
@@ -22,7 +22,7 @@ func newNode() *node {
 	return &node{forward: make([]*node, MAX_LEVEL)}
 }
 
-func New() *List {
+func NewList() *List {
 	return &List{head: newNode()}
 }
 
