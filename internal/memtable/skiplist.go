@@ -2,6 +2,7 @@ package memtable
 
 import (
 	"math/rand/v2"
+	"sync"
 	"unsafe"
 )
 
@@ -10,7 +11,19 @@ const (
 )
 
 type List struct {
+	mu   sync.RWMutex
 	head *node
+}
+
+type Iterator struct {
+	n *node
+}
+
+func (i *Iterator) Next() Iterator {
+	if i.n.forward[0] != nil {
+		return Iterator{i.n.forward[0]}
+	}
+	return Iterator{}
 }
 
 type node struct {
@@ -26,21 +39,28 @@ func NewList() *List {
 	return &List{head: newNode()}
 }
 
-func (l *List) Get(k string) (Tuple, bool) {
+// returns highest key >= query
+func (l *List) getIterator(query string) (Iterator, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
 	curr := l.head
 	for i := MAX_LEVEL - 1; i >= 0; i-- {
-		for curr.forward[i] != nil && k > curr.forward[i].tuple.Key {
+		for curr.forward[i] != nil && query > curr.forward[i].tuple.Key {
 			curr = curr.forward[i]
 		}
 	}
 	curr = curr.forward[0]
-	if curr == nil || curr.tuple.Key != k {
-		return Tuple{}, false
+	if curr == nil {
+		return Iterator{}, false
 	}
-	return cloneTuple(curr.tuple), true
+	return Iterator{curr}, true
 }
 
-func (l *List) Put(t Tuple) {
+func (l *List) put(t Tuple) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	update := make([]*node, MAX_LEVEL)
 	curr := l.head
 	for level := MAX_LEVEL - 1; level >= 0; level-- {
@@ -55,7 +75,7 @@ func (l *List) Put(t Tuple) {
 	}
 	n := newNode()
 	n.tuple = cloneTuple(t)
-	for level := 0; level < MAX_LEVEL; level++ {
+	for level := range MAX_LEVEL {
 		n.forward[level] = update[level].forward[level]
 		update[level].forward[level] = n
 		if level > 0 && rand.IntN(2) == 0 {
@@ -64,45 +84,10 @@ func (l *List) Put(t Tuple) {
 	}
 }
 
-func (l *List) Scan(from, to string) []Tuple {
-	curr := l.head
-	for i := MAX_LEVEL - 1; i >= 0; i-- {
-		for curr.forward[i] != nil && from > curr.forward[i].tuple.Key {
-			curr = curr.forward[i]
-		}
-	}
-	ans := make([]Tuple, 0)
-	curr = curr.forward[0]
-	for curr != nil && curr.tuple.Key <= to {
-		ans = append(ans, cloneTuple(curr.tuple))
-		curr = curr.forward[0]
-	}
-	return ans
-}
+func (l *List) size() int {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
-func (l *List) Entries() []Tuple {
-	entries := make([]Tuple, 0)
-	for curr := l.head.forward[0]; curr != nil; curr = curr.forward[0] {
-		entries = append(entries, cloneTuple(curr.tuple))
-	}
-	return entries
-}
-
-func (l *List) MarshalBinary() ([]byte, error) {
-	b := make([]byte, 0)
-	curr := l.head.forward[0]
-	for curr != nil {
-		tupleBytes, err := curr.tuple.MarshalBinary()
-		if err != nil {
-			return nil, err
-		}
-		b = append(b, tupleBytes...)
-		curr = curr.forward[0]
-	}
-	return b, nil
-}
-
-func (l *List) Size() int {
 	s := 0
 	curr := l.head
 	for curr != nil {
